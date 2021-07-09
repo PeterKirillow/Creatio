@@ -5,11 +5,15 @@ import pickle
 import json
 import sys
 import argparse
+from datetime import date, time, datetime
+from dateutil.parser import parse
 
 out = sys.stdout
 outto = None
 
 #---------------------------------------------------
+# -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
+# -c -cf d:/projects/git/creatio/creatio_cookie get Employee
 parser = argparse.ArgumentParser()
 parser.add_argument("method", type=str, help="Method name (get|metadata)")
 parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
@@ -178,6 +182,9 @@ def get(collection):
 				s = s + "\"collection\":\"" + collection + "\","		
 				if (collection != "metadata"):
 					s = s + "\"id\":\"" + j["Id"] +"\","
+					# -- datetime
+					date_time_obj = datetime. strptime(j["CreatedOn"], '%y/%m/%d %H:%M:%S')
+					# -- 
 					s = s + "\"CreatedOn\":\"" + j["CreatedOn"] +"\","
 					s = s + "\"ModifiedOn\":\"" + j["ModifiedOn"] +"\","
 
