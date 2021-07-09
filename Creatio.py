@@ -4,16 +4,34 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import pickle
 import json
 import sys
+import argparse
 
 out = sys.stdout
+outto = None
 
-if (len(sys.argv) < 3):
-	err = {
-		"Code": 1,
-		"Message": "usage: creatio.py <method (get|metadata)> <collection|coma delimited collections list> <out to file (true|false)>"
-		}
-	out.write(json.dumps(err))
+#---------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument("method", type=str, help="Method name (get|metadata)")
+parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
+parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, help="Path to cookie file")
+# file or console
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument("-c", "--console", action="store_true", help="Out result to console")
+group.add_argument("-fp", "--filepath", action="store", dest="filepath", type=str, help="Out result to file in path")
+try:
+	args = parser.parse_args()
+except:
 	sys.exit(0)
+if args.console:
+	outto = "console"
+else:
+	outto = "file"
+	filepath = args.filepath
+
+method = args.method.lower()
+collection = "" if args.collection.lower() == "none" else args.collection
+cookiefile = args.cookiefile
+#---------------------------------------------------
 
 verify_flag = False
 sys.tracebacklimit = 0
@@ -26,14 +44,6 @@ url_coll = "https://pre-ervez.terrasoft.ru/0/odata"
 username = "peter"
 userpassword = "Peter@1234"
 #---------------------------------------------------
-cookiepath = "d:/projects/git/creatio"
-cookiefilename = "creatio_cookie"
-filepath = "c:/tmp/json"
-#---------------------------------------------------
-
-method = sys.argv[1].lower()
-collection = "" if sys.argv[2].lower() == "none" else sys.argv[2]
-
 
 headers = {
 	"Accept": "application/json",
@@ -89,7 +99,7 @@ def auth() -> bool:
 	response = requests.request("POST", url_auth, headers=headers, data=payload, verify=False)
 	error = Error(json.loads(response.text))
 	if (error.Code == 0):
-		save_cookies(response.cookies, cookiepath+"/"+cookiefilename)
+		save_cookies(response.cookies, cookiefile)
 	else:
 		ret = False
 	return ret
@@ -110,7 +120,7 @@ def get(collection):
 		if retry_c >= retry_cnt:
 			retry = False
 		try:
-			response = requests.request("GET", url_coll+"/"+collection, headers=headers, cookies=load_cookies(cookiepath+"/"+cookiefilename), verify=verify_flag)
+			response = requests.request("GET", url_coll+"/"+collection, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
 
 			if "@odata.context" in response.text:
 				retry = False
@@ -189,10 +199,19 @@ if method == "get":
 	coll_list = collection.split(",")
 	for c in coll_list:
 		s = get(c)
+		if outto == "console":
+			out.write(s)
+		else:
+			with open(f"{filepath}/{c}.json", 'wt', encoding='utf-8') as f:
+				f.write(s)
+elif method == "metadata" and collection != "ALL":
+	s = get("")
+	if outto == "console":
 		out.write(s)
-		with open(f"{filepath}/{c}.json", 'wt') as f:
+	else:
+		with open(f"{filepath}/metadata.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
-elif method == "metadata":
+elif method == "metadata" and collection == "ALL":
 	s = get("")
 	j = json.loads(s)
 	for k in j:
