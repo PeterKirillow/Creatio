@@ -14,12 +14,21 @@ outto = None
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
 # -c -cf d:/projects/git/creatio/creatio_cookie get Employee
 # -f "ModifiedOn%20gt%202020-01-01T00:00:00.00Z"
+# -d "{\"Name\": \"New User\", \"JobTitle\": \"Developer\", \"BirthDate\": \"1980-08-24T00:00:00Z\"}"
+
+# -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Contact -f "ModifiedOn%20gt%202021-07-13T00:00:00.00Z"
+# -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee"
+# !!!!!!
+# -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
+# !!!!!!
 parser = argparse.ArgumentParser()
 parser.add_argument("method", type=str, help="Method name (get|metadata)")
 parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
 parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, required=True, help="Path to cookie file")
 # filter
 parser.add_argument("-f", "--filter", action="store", dest="filter", type=str, help="Filter expression")
+# data-raw
+parser.add_argument("-d", "--data", action="store", dest="dataraw", type=str, help="Data in json format")
 # file or console
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("-c", "--console", action="store_true", help="Out result to console")
@@ -39,6 +48,7 @@ method = args.method.lower()
 collection = "" if args.collection.lower() == "none" else args.collection
 cookiefile = args.cookiefile
 filter = "" if args.filter is None else "?$filter=" + args.filter
+dataraw = "" if args.dataraw is None else args.dataraw
 #---------------------------------------------------
 
 verify_flag = False
@@ -113,7 +123,7 @@ def auth() -> bool:
 	return ret
 
 #---------------------------------------------------
-def get(collection):
+def call(method, collection):
 	global error	
 	global retry_cnt
 	global cookiepath, cookiefilename
@@ -128,7 +138,13 @@ def get(collection):
 		if retry_c >= retry_cnt:
 			retry = False
 		try:
-			response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
+			if method == "GET":
+				response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
+			elif method == "POST":
+				response = requests.request("POST", url_coll+"/"+collection+filter, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
+				print(response.text)
+			else:
+				break
 
 			if "@odata.context" in response.text:
 				retry = False
@@ -206,14 +222,22 @@ def get(collection):
 if method == "get":
 	coll_list = collection.split(",")
 	for c in coll_list:
-		s = get(c)
+		s = call("GET",c)
 		if outto == "console":
 			out.write(s)
 		else:
 			with open(f"{filepath}/{c}.json", 'wt', encoding='utf-8') as f:
 				f.write(s)
+elif method == "post":
+	coll_list = collection.split(",")
+	s = call("POST",coll_list[0])
+	if outto == "console":
+		out.write(s)
+	else:
+		with open(f"{filepath}/{c}_answer.json", 'wt', encoding='utf-8') as f:
+			f.write(s)
 elif method == "metadata" and collection != "ALL":
-	s = get("")
+	s = call("GET","")
 	if outto == "console":
 		out.write(s)
 	else:
@@ -221,7 +245,7 @@ elif method == "metadata" and collection != "ALL":
 			f.write(s)
 # loop. for test only
 elif method == "metadata" and collection == "ALL":
-	s = get("")
+	s = call("GET","")
 	j = json.loads(s)
 	for k in j:
 		v = k["values"]
