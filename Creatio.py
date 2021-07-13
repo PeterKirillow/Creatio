@@ -12,17 +12,13 @@ outto = None
 
 #---------------------------------------------------
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
-# -c -cf d:/projects/git/creatio/creatio_cookie get Employee
-# -f "ModifiedOn%20gt%202020-01-01T00:00:00.00Z"
-# -d "{\"Name\": \"New User\", \"JobTitle\": \"Developer\", \"BirthDate\": \"1980-08-24T00:00:00Z\"}"
-
-# -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Contact -f "ModifiedOn%20gt%202021-07-13T00:00:00.00Z"
-# -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee"
+# -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee
+# -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Contact -f "ModifiedOn gt 2021-06-13T00:00:00.00Z"
 # !!!!!!
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # !!!!!!
 parser = argparse.ArgumentParser()
-parser.add_argument("method", type=str, help="Method name (get|metadata)")
+parser.add_argument("method", type=str, help="Method name (get|post|patch|delete|metadata)")
 parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
 parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, required=True, help="Path to cookie file")
 # filter
@@ -44,7 +40,7 @@ else:
 	outto = "file"
 	filepath = args.filepath
 
-method = args.method.lower()
+method = args.method.upper()
 collection = "" if args.collection.lower() == "none" else args.collection
 cookiefile = args.cookiefile
 filter = "" if args.filter is None else "?$filter=" + args.filter
@@ -141,7 +137,7 @@ def call(method, collection):
 			if method == "GET":
 				response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
 			elif method == "POST":
-				response = requests.request("POST", url_coll+"/"+collection+filter, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
+				response = requests.request("POST", url_coll+"/"+collection, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
 			else:
 				break
 
@@ -227,7 +223,7 @@ def call(method, collection):
 
 #---------------------------------------------------
 
-if method == "get":
+if method == "GET":
 	coll_list = collection.split(",")
 	for c in coll_list:
 		s = call("GET",c)
@@ -236,7 +232,7 @@ if method == "get":
 		else:
 			with open(f"{filepath}/{c}.json", 'wt', encoding='utf-8') as f:
 				f.write(s)
-elif method == "post":
+elif method == "POST":
 	coll_list = collection.split(",")
 	s = call("POST",coll_list[0])
 	if outto == "console":
@@ -244,7 +240,15 @@ elif method == "post":
 	else:
 		with open(f"{filepath}/{c}_answer.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
-elif method == "metadata" and collection != "ALL":
+elif method == "PATCH":
+	coll_list = collection.split(",")
+	s = call("POST",coll_list[0])
+	if outto == "console":
+		out.write(s)
+	else:
+		with open(f"{filepath}/{c}_answer.json", 'wt', encoding='utf-8') as f:
+			f.write(s)
+elif method == "METADATA" and collection != "ALL":
 	s = call("GET","")
 	if outto == "console":
 		out.write(s)
@@ -252,7 +256,7 @@ elif method == "metadata" and collection != "ALL":
 		with open(f"{filepath}/metadata.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
 # loop. for test only
-elif method == "metadata" and collection == "ALL":
+elif method == "METADATA" and collection == "ALL":
 	s = call("GET","")
 	j = json.loads(s)
 	for k in j:
