@@ -14,6 +14,8 @@ outto = None
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
 # -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee
 # -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Contact -f "ModifiedOn gt 2021-06-13T00:00:00.00Z"
+# -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(f78473be-7903-4b12-8172-013d9b8ebc26) -d "{'Name': 'Шниперсян Давид Арнольдович', 'JobTitle': 'Простой менеджер', 'BirthDate': '1980-08-24T00:00:00Z'}"
+# -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(f78473be-7903-4b12-8172-013d9b8ebc26) -d "{'JobTitle': 'Simple Job', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # !!!!!!
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # !!!!!!
@@ -45,6 +47,7 @@ collection = "" if args.collection.lower() == "none" else args.collection
 cookiefile = args.cookiefile
 filter = "" if args.filter is None else "?$filter=" + args.filter
 dataraw = "" if args.dataraw is None else args.dataraw
+#dataraw =  d.encode()
 #---------------------------------------------------
 
 verify_flag = False
@@ -62,6 +65,12 @@ userpassword = "Peter@1234"
 headers = {
 	"Accept": "application/json",
 	"Content-Type": "application/json; charset=utf-8",
+	"ForceUseSession": "true"
+}
+headers_patch = {
+	"Accept": "application/json",
+	"Content-Type": "application/json; charset=utf-8",
+	'X-HTTP-Method-Override':'PATCH',
 	"ForceUseSession": "true"
 }
 
@@ -128,6 +137,7 @@ def call(method, collection):
 	retry_c = 0
 
 	s = ""
+	response = None
 
 	while (retry):
 		retry_c = retry_c + 1
@@ -135,9 +145,12 @@ def call(method, collection):
 			retry = False
 		try:
 			if method == "GET":
-				response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
+				response = requests.get(url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
 			elif method == "POST":
-				response = requests.request("POST", url_coll+"/"+collection, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
+				response = requests.post(url_coll+"/"+collection, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
+			elif method == "PATCH":
+				#response = requests.patch(url_coll+"/"+collection, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
+				response = requests.post(url_coll+"/"+collection, headers=headers_patch, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
 			else:
 				break
 
@@ -152,6 +165,14 @@ def call(method, collection):
 				retry = False
 			else:
 				auth()
+		except requests.exceptions.RequestException as e:
+			retry = False
+			payload = {
+				"Code": 1,
+				"Message": str(e)
+				}
+			error = Error(payload)
+			return json.dumps(error.__dict__)
 		except:
 			# if file with cookies not found
 			auth()
@@ -168,9 +189,10 @@ def call(method, collection):
 	try:
 		js = json.loads(response.text)
 	except:
+		msg = "" if response is None else response.text
 		payload = {
 			"Code": 1,
-			"Message": response.text
+			"Message": msg
 			}
 		error = Error(payload)
 		return json.dumps(error.__dict__)
@@ -238,15 +260,16 @@ elif method == "POST":
 	if outto == "console":
 		out.write(s)
 	else:
-		with open(f"{filepath}/{c}_answer.json", 'wt', encoding='utf-8') as f:
+		with open(f"{filepath}/{c}_post.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
 elif method == "PATCH":
+	# b.e. Contact(c31c7862-fe33-4a13-9bbc-0943fa08fd02)
 	coll_list = collection.split(",")
-	s = call("POST",coll_list[0])
+	s = call("PATCH",coll_list[0])
 	if outto == "console":
 		out.write(s)
 	else:
-		with open(f"{filepath}/{c}_answer.json", 'wt', encoding='utf-8') as f:
+		with open(f"{filepath}/{c}_patch.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
 elif method == "METADATA" and collection != "ALL":
 	s = call("GET","")
