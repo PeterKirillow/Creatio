@@ -142,7 +142,6 @@ def call(method, collection):
 				response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
 			elif method == "POST":
 				response = requests.request("POST", url_coll+"/"+collection+filter, headers=headers, data=dataraw, cookies=load_cookies(cookiefile), verify=verify_flag)
-				print(response.text)
 			else:
 				break
 
@@ -168,8 +167,17 @@ def call(method, collection):
 		if error.Code != 0:
 			status = False
 			return json.dumps(error.__dict__)
-
-	js = json.loads(response.text)
+	
+	# error. but not in json format
+	try:
+		js = json.loads(response.text)
+	except:
+		payload = {
+			"Code": 1,
+			"Message": response.text
+			}
+		error = Error(payload)
+		return json.dumps(error.__dict__)
 
 	# check error 2
 	if "@odata.context" not in response.text:
@@ -177,7 +185,7 @@ def call(method, collection):
 			payload = {
 				"Code": 1,
 				"Message": json.dumps(js["error"])
-				}			
+				}
 		else:
 			payload = {
 				"Code": 1,
