@@ -6,7 +6,6 @@ import json
 import sys
 import argparse
 from datetime import date, time, datetime
-from dateutil.parser import parse
 
 out = sys.stdout
 outto = None
@@ -14,14 +13,18 @@ outto = None
 #---------------------------------------------------
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
 # -c -cf d:/projects/git/creatio/creatio_cookie get Employee
+# -f "ModifiedOn%20gt%202020-01-01T00:00:00.00Z"
 parser = argparse.ArgumentParser()
 parser.add_argument("method", type=str, help="Method name (get|metadata)")
 parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
-parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, help="Path to cookie file")
+parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, required=True, help="Path to cookie file")
+# filter
+parser.add_argument("-f", "--filter", action="store", dest="filter", type=str, help="Filter expression")
 # file or console
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("-c", "--console", action="store_true", help="Out result to console")
 group.add_argument("-fp", "--filepath", action="store", dest="filepath", type=str, help="Out result to file in path")
+
 try:
 	args = parser.parse_args()
 except:
@@ -35,6 +38,7 @@ else:
 method = args.method.lower()
 collection = "" if args.collection.lower() == "none" else args.collection
 cookiefile = args.cookiefile
+filter = "" if args.filter is None else "?$filter=" + args.filter
 #---------------------------------------------------
 
 verify_flag = False
@@ -124,7 +128,7 @@ def get(collection):
 		if retry_c >= retry_cnt:
 			retry = False
 		try:
-			response = requests.request("GET", url_coll+"/"+collection, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
+			response = requests.request("GET", url_coll+"/"+collection+filter, headers=headers, cookies=load_cookies(cookiefile), verify=verify_flag)
 
 			if "@odata.context" in response.text:
 				retry = False
@@ -182,9 +186,6 @@ def get(collection):
 				s = s + "\"collection\":\"" + collection + "\","		
 				if (collection != "metadata"):
 					s = s + "\"id\":\"" + j["Id"] +"\","
-					# -- datetime
-					date_time_obj = datetime. strptime(j["CreatedOn"], '%y/%m/%d %H:%M:%S')
-					# -- 
 					s = s + "\"CreatedOn\":\"" + j["CreatedOn"] +"\","
 					s = s + "\"ModifiedOn\":\"" + j["ModifiedOn"] +"\","
 
@@ -218,6 +219,7 @@ elif method == "metadata" and collection != "ALL":
 	else:
 		with open(f"{filepath}/metadata.json", 'wt', encoding='utf-8') as f:
 			f.write(s)
+# loop. for test only
 elif method == "metadata" and collection == "ALL":
 	s = get("")
 	j = json.loads(s)
