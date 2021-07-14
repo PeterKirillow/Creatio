@@ -73,9 +73,6 @@ if args.dataraw is None:
 	dataraw = ""
 else:
 	dataraw = args.dataraw.replace("'","\"")
-#dataraw = "" if args.dataraw is None else args.dataraw
-#dataraw =  d.encode()
-#dataraw = dataraw.replace("'","\"")
 
 #---------------------------------------------------
 class Exception(object):
@@ -87,7 +84,7 @@ class Exception(object):
 	def __init__(self, dictionary):
 		for key in dictionary:
 			k = key.lower().capitalize()
-			if k in {"Helplink"}:
+			if k in {"Helplink","InnerException","Message","StackTrace","Type"}:
 				setattr(self, k, dictionary[key])
 class Error(object):
 	Code = None
@@ -98,11 +95,13 @@ class Error(object):
 	def __init__(self, dictionary):
 		for key in dictionary:
 			k = key.lower().capitalize()
-			if k in {"Exception1"}:
+			if k in {"Exception"}:
 				if not dictionary[k] is None:
 					setattr(self, k, Exception(dictionary[key]))    
 			elif k in {"Code","Message","Passwordchangeurl","Redirecturl"}:
 				setattr(self, k, dictionary[key])
+	def toJSON(self):
+		return json.dumps(self, default=lambda o: o.__dict__, sort_keys=False, indent=4)
 
 #---------------------------------------------------
 def save_cookies(requests_cookiejar, filename):
@@ -111,7 +110,6 @@ def save_cookies(requests_cookiejar, filename):
 
 #---------------------------------------------------
 def load_cookies(filename):
-	global domain
 	try:
 		with open(filename, 'rb') as f:
 			return pickle.load(f)
@@ -208,7 +206,7 @@ def call(method, collection):
 	if error is not None:
 		if error.Code != 0:
 			status = False
-			return json.dumps(error.__dict__)
+			return error.toJSON()
 	
 	# error. but not in json format
 	try:
@@ -216,7 +214,7 @@ def call(method, collection):
 	except:
 		msg = "" if response is None else response.text
 		error = Error({"Code": 1, "Message": msg})
-		return json.dumps(error.__dict__)
+		return error.toJSON()
 
 	# check error 2
 	if "@odata.context" not in response.text:
@@ -225,7 +223,7 @@ def call(method, collection):
 		else:
 			payload = {"Code": 1, "Message": response.text}
 		error = Error(payload)
-		return json.dumps(error.__dict__)
+		return error.toJSON()
 
 	status = True
 	if status:
@@ -311,3 +309,4 @@ def main():
 
 #****************************************************************************************
 main()
+
