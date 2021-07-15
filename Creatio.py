@@ -15,7 +15,7 @@ username = "peter"
 userpassword = "Peter@1234"
 #---------------------------------------------------
 
-out = sys.stdout
+outc = sys.stdout
 sys.tracebacklimit = 0
 # disable insecure ssl verify
 verify_flag = False
@@ -24,10 +24,15 @@ if (verify_flag == False):
 outto = None
 error = None
 BPMCSRF = None
+responsecode = None
 
 #---------------------------------------------------
+# 200 - GET and Authentication (POST) OK
+# 201 - POST Add object collection instance OK
+# 204 - PATCH Modify object collection instance OK, DEL Delete object collection instance OK
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
 # -cf d:/projects/git/creatio/creatio_cookie -c get Employee
+# -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Employee
 # -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee
 
 # filter example - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#c543848b-cbec-4d4c-9037-e0234b5b3b6c
@@ -35,9 +40,10 @@ BPMCSRF = None
 
 # create object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#837e4578-4a8c-4637-97d4-657079f12fe0
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
-# -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'Новый пользователь', 'JobTitle': 'DДиректор', 'BirthDate': '1980-08-24T00:00:00Z'}"
+# -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'Новый пользователь', 'JobTitle': 'Директор', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # update object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#da518295-e1c8-4114-9f03-f5f236174986
 # -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(f78473be-7903-4b12-8172-013d9b8ebc26) -d "{'JobTitle': 'Simple Job', 'BirthDate': '1980-08-24T00:00:00Z'}"
+# -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(6227b43d-ba46-458f-bc38-601173358cb7) -d "{'JobTitle': 'Проём окна', 'BirthDate': '1980-05-24T00:00:00Z', 'Email': "qq@gmail.com"}"
 # delete object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#364435a7-12ef-4924-83cf-ed9e74c23439
 # -cf d:/projects/git/creatio/creatio_cookie -c delete Contact(a1efd326-507b-4519-9e58-3e0fcff84389)
 #---------------------------------------------------
@@ -59,6 +65,7 @@ try:
 	args = parser.parse_args()
 except:
 	sys.exit(0)
+
 if args.console:
 	outto = "console"
 else:
@@ -66,6 +73,8 @@ else:
 	filepath = args.filepath
 
 method = args.method.upper()
+if method not in {'GET','POST','PATCH','DELETE','METADATA'}:
+	exit(0)
 collection = "" if args.collection.lower() == "none" else args.collection
 cookiefile = args.cookiefile
 filter = "" if args.filter is None else "?$filter=" + args.filter
@@ -73,6 +82,7 @@ if args.dataraw is None:
 	dataraw = ""
 else:
 	dataraw = args.dataraw.replace("'","\"")
+	dataraw = dataraw.encode()
 
 #---------------------------------------------------
 class Exception(object):
@@ -86,18 +96,31 @@ class Exception(object):
 			k = key.lower().capitalize()
 			if k in {"Helplink","InnerException","Message","StackTrace","Type"}:
 				setattr(self, k, dictionary[key])
+class Innererror(object):
+	Message = None
+	Type = None
+	Stacktrace = None
+	def __init__(self, dictionary):
+		for key in dictionary:
+			k = key.lower().capitalize()
+			if k in {"Message","Type","Stacktrace"}:
+				setattr(self, k, dictionary[key])
 class Error(object):
 	Code = None
 	Message = None
 	Exception = None
 	Passwordchangeurl = None
 	Redirecturl = None
+	Innererror = None
 	def __init__(self, dictionary):
 		for key in dictionary:
 			k = key.lower().capitalize()
 			if k in {"Exception"}:
 				if not dictionary[k] is None:
 					setattr(self, k, Exception(dictionary[key]))    
+			elif k in {"Innererror"}:
+				if not dictionary[k] is None:
+					setattr(self, k, Innererror(dictionary[key]))    
 			elif k in {"Code","Message","Passwordchangeurl","Redirecturl"}:
 				setattr(self, k, dictionary[key])
 	def toJSON(self):
@@ -128,8 +151,9 @@ def auth() -> bool:
 		}
 	payload = "{\"UserName\":\"" + username + "\",\"UserPassword\":\"" + userpassword + "\"}"
 	response = requests.request("POST", url_auth, headers=headers, data=payload, verify=False)
+	responsecode = response.status_code
 	if response.status_code != 200:
-		error = Error({"Code": 1, "Message": str(response.status_code) + ": " + response.reason})
+		error = Error({"Code": str(response.status_code), "Message": response.reason})
 		ret = False
 	else:
 		error = Error(json.loads(response.text))
@@ -138,6 +162,16 @@ def auth() -> bool:
 		else:
 			ret = False
 	return ret
+
+#---------------------------------------------------
+def out(filename, s):
+	global filepath
+	if outto == "console":
+			#outc.write(s)
+			print(s)
+	else:
+		with open(f"{filepath}/" + filename, 'wt', encoding="utf-8") as f:
+			f.write(s)
 
 #---------------------------------------------------
 def call(method, collection):
@@ -173,25 +207,26 @@ def call(method, collection):
 			else:
 				break
 
-			if response.status_code == 204 and method in {"PATCH","DELETE"}:
-				# no content (204) - OK for patch,delete
+			responsecode = response.status_code
+
+			if responsecode == 204 and method in {"PATCH","DELETE"}:
+				# (204) Object updated or deleted - OK
 				t = "deleted" if method == "DELETE" else "updated"
-				error = Error({"Code": 2, "Message": str(response.status_code) + ": object was " + t})
+				error = Error({"Code": str(response.status_code), "Message": "Object was " + t})
 				retry  = False
-			elif response.status_code == 201 and method == "POST":
-				# Created (201) - OK for post
-				error = Error({"Code": 2, "Message": str(response.status_code) + ": object was created"})
+			elif responsecode == 201 and method == "POST":
+				# (201) Object Created - OK
 				retry  = False
-			elif response.status_code == 404:
-				error = Error({"Code": 1, "Message": str(response.status_code) + ": nothing to do"})
+			elif responsecode == 404:
+				error = Error({"Code": str(response.status_code), "Message": "Nothing to do"})
 				retry  = False
 			elif "@odata.context" in response.text:
 				retry = False
 			elif "Access is denied" in response.text:
-				error = Error({"Code": 1, "Message": "Access is denied"})
+				error = Error({"Code": str(response.status_code), "Message": "Access is denied"})
 				retry = False
 			elif "File or directory not found" in response.text:
-				error = Error({"Code": 1, "Message": "File or directory not found"})
+				error = Error({"Code": str(response.status_code), "Message": "File or directory not found"})
 				retry = False
 			else:
 				# unknown problem, just try authenticate one time
@@ -213,48 +248,58 @@ def call(method, collection):
 		js = json.loads(response.text)
 	except:
 		msg = "" if response is None else response.text
-		error = Error({"Code": 1, "Message": msg})
+		error = Error({"Code": str(response.status_code), "Message": msg})
 		return error.toJSON()
 
 	# check error 2
 	if "@odata.context" not in response.text:
 		if js.get("error") != None:
-			payload = {"Code": 1, "Message": json.dumps(js["error"])}
-		else:
-			payload = {"Code": 1, "Message": response.text}
-		error = Error(payload)
+			error = Error(js["error"])
+		else:			
+			error = Error({"Code": 1, "Message": response.text})
 		return error.toJSON()
 
-	status = True
-	if status:
-		collection = 'metadata' if collection == "" else collection
+	collection = 'metadata' if collection == "" else collection
 
-		if len(js["value"]) > 0:
-			# get keys
-			js_v = json.loads(json.dumps(js["value"][0]))
+	if js.get("value") != None:
+		js_v = json.loads(json.dumps(js["value"][0]))
+		s = "{\"Code\": " + str(responsecode) + ",\"values\":["
+		for j in js["value"]:
+			s = s + "{"
+			s = s + "\"collection\":\"" + collection + "\","		
+			if (collection != "metadata"):
+				s = s + "\"id\":\"" + j["Id"] +"\","
+				dc = datetime.strptime(j["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+				dm = datetime.strptime(j["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+				s = s + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
+				s = s + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
 
-			s = "[{\"values\":["
-
-			for j in js["value"]:
-				s = s + "{"
-
-				s = s + "\"collection\":\"" + collection + "\","		
-				if (collection != "metadata"):
-					s = s + "\"id\":\"" + j["Id"] +"\","
-					dc = datetime.strptime(j["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
-					dm = datetime.strptime(j["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
-					s = s + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
-					s = s + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
-
-				s = s + "\"data\":\"{"
-				for key, value in js_v.items():
-					if key not in ["Id", "CreatedOn", "ModifiedOn"]:
-						s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
-				s = s[:-1]
-				s = s + "}\"},"
-		
+			s = s + "\"data\":\"{"
+			for key, value in js_v.items():
+				if key not in ["Id", "CreatedOn", "ModifiedOn"]:
+					s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
 			s = s[:-1]
-			s =	s + "]}]"
+			s = s + "}\"},"
+		s = s[:-1]
+		s =	s + "]}"
+	elif responsecode == 201:
+		# new object response
+		js_v = json.loads(json.dumps(js))
+		s = "{\"Code\": " + str(responsecode) + ",\"values\":["
+		s = s + "{"
+		s = s + "\"collection\":\"" + collection + "\","	
+		s = s + "\"id\":\"" + js_v["Id"] +"\","
+		dc = datetime.strptime(js_v["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+		dm = datetime.strptime(js_v["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+		s = s + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
+		s = s + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
+		s = s + "\"data\":\"{"
+		for key, value in js_v.items():
+			if key not in ["Id", "CreatedOn", "ModifiedOn", "@odata.context"]:
+				s = s + "\\\"" + key + "\\\":\\\"" + str(js_v[key]) + "\\\","
+		s = s[:-1]
+		s = s + "}\"}"
+		s =	s + "]}"
 
 	return s
 
@@ -264,36 +309,17 @@ def main():
 		coll_list = collection.split(",")
 		for c in coll_list:
 			s = call("GET",c)
-			if outto == "console":
-				out.write(s)
-			else:
-				with open(f"{filepath}/{c}.json", 'wt', encoding='utf-8') as f:
-					f.write(s)
-	elif method == "POST":
+			out(f"{c}.json", s)
+
+	elif method in {"POST","PATCH","DELETE"}:
 		coll_list = collection.split(",")
 		s = call(method,coll_list[0])
-		if outto == "console":
-			out.write(s)
-		else:
-			with open(f"{filepath}/{c}_post.json", 'wt', encoding='utf-8') as f:
-				f.write(s)
-	elif method in ("PATCH","DELETE"):
-		# b.e. Contact(c31c7862-fe33-4a13-9bbc-0943fa08fd02)
-		coll_list = collection.split(",")
-		s = call(method,coll_list[0])
-		if outto == "console":
-			out.write(s)
-		else:
-			with open(f"{filepath}/{c}_patch.json", 'wt', encoding='utf-8') as f:
-				f.write(s)
+		out(f"{coll_list[0]}_{method}.json", s)
+
 	elif method == "METADATA" and collection != "ALL":
 		s = call("GET","")
-		if outto == "console":
-			out.write(s)
-		else:
-			with open(f"{filepath}/metadata.json", 'wt', encoding='utf-8') as f:
-				f.write(s)
-	# loop. for test only
+		out("metadata.json", s)
+
 	elif method == "METADATA" and collection == "ALL":
 		s = call("GET","")
 		j = json.loads(s)
@@ -302,11 +328,18 @@ def main():
 			for d in v:
 				dj = json.loads(d["data"])
 				print(name)
-				if name not in ("VwSysSchemaInfo"):
+				if name not in {"VwSysSchemaInfo"}:
 					s = get(name)
-					with open(f"{filepath}/{name}.json", 'wt', encoding='utf-8') as f:
-						f.write(s)
+					out(f"{name}.json", s)
+	else:
+		pass
 
+#---------------------------------------------------
+def test():
+	pass
+	
+	
 #****************************************************************************************
 main()
+#test()
 
