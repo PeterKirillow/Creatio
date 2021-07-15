@@ -12,7 +12,7 @@ domain = "pre-ervez.terrasoft.ru"
 url_auth = "https://" + domain + "/ServiceModel/AuthService.svc/Login"
 url_coll = "https://" + domain + "/0/odata"
 username = "peter"
-userpassword = "Peter@12345"
+userpassword = "Peter@1234"
 #---------------------------------------------------
 
 outc = sys.stdout
@@ -25,7 +25,24 @@ outto = None
 error = None
 BPMCSRF = None
 responsecode = None
+method = None
+collection = None
+filter = None
+dataraw = None
+outto = None
+filepath = None
+cookiefile = None
 
+#---------------------------------------------------
+# JSON argument
+#{
+#	"method": "",
+#	"collection": "",
+#	"filter": "",
+#	"data": "",
+#	"output": "",
+#	"filepath": ""
+#}
 #---------------------------------------------------
 # 200 - GET and Authentication (POST) OK
 # 201 - POST Add object collection instance OK
@@ -49,41 +66,44 @@ responsecode = None
 # -cf d:/projects/git/creatio/creatio_cookie -c delete Contact(a1efd326-507b-4519-9e58-3e0fcff84389)
 #---------------------------------------------------
 
-parser = argparse.ArgumentParser()
-parser.add_argument("method", type=str, help="Method name (get|post|patch|delete|metadata)")
-parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
-parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, required=True, help="Path to cookie file")
-# filter
-parser.add_argument("-f", "--filter", action="store", dest="filter", type=str, help="Filter expression")
-# data-raw
-parser.add_argument("-d", "--data", action="store", dest="dataraw", type=str, help="Data in json format")
-# output to file or console
-group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument("-c", "--console", action="store_true", help="Out result to console")
-group.add_argument("-fp", "--filepath", action="store", dest="filepath", type=str, help="Out result to file in path")
+#---------------------------------------------------
+def arguments():
+	global method, collection, filter, dataraw, outto, filepath, cookiefile
+	parser = argparse.ArgumentParser()
+	parser.add_argument("method", type=str, help="Method name (get|post|patch|delete|metadata)")
+	parser.add_argument("collection", type=str, help="Collection name or comma delimited list")
+	parser.add_argument("-cf", "--cookiefile", action="store", dest="cookiefile", type=str, required=True, help="Path to cookie file")
+	# filter
+	parser.add_argument("-f", "--filter", action="store", dest="filter", type=str, help="Filter expression")
+	# data-raw
+	parser.add_argument("-d", "--data", action="store", dest="dataraw", type=str, help="Data in json format")
+	# output to file or console
+	group = parser.add_mutually_exclusive_group(required=True)
+	group.add_argument("-c", "--console", action="store_true", help="Out result to console")
+	group.add_argument("-fp", "--filepath", action="store", dest="filepath", type=str, help="Out result to file in path")
 
-try:
-	args = parser.parse_args()
-except:
-	sys.exit(0)
+	try:
+		args = parser.parse_args()
+	except:
+		sys.exit(0)
 
-if args.console:
-	outto = "console"
-else:
-	outto = "file"
-	filepath = args.filepath
+	if args.console:
+		outto = "console"
+	else:
+		outto = "file"
+		filepath = args.filepath
 
-method = args.method.upper()
-if method not in {'GET','POST','PATCH','DELETE','METADATA'}:
-	exit(0)
-collection = "" if args.collection.lower() == "none" else args.collection
-cookiefile = args.cookiefile
-filter = "" if args.filter is None else "?$filter=" + args.filter
-if args.dataraw is None:
-	dataraw = ""
-else:
-	dataraw = args.dataraw.replace("'","\"")
-	dataraw = dataraw.encode()
+	method = args.method.upper()
+	if method not in {'GET','POST','PATCH','DELETE','METADATA'}:
+		exit(0)
+	collection = "" if args.collection.lower() == "none" else args.collection
+	cookiefile = args.cookiefile
+	filter = "" if args.filter is None else "?$filter=" + args.filter
+	if args.dataraw is None:
+		dataraw = ""
+	else:
+		dataraw = args.dataraw.replace("'","\"")
+		dataraw = dataraw.encode()
 
 #---------------------------------------------------
 class Exception(object):
@@ -337,10 +357,10 @@ def call(method, collection):
 		s = s + "\"data\":\"{"
 		for key, value in js_v.items():
 			if key not in ["Id", "CreatedOn", "ModifiedOn", "@odata.context"]:
-				if type(j[key]) == str:
-					s = s + "\\\"" + key + "\\\":\\\"" + escapestr(j[key]) + "\\\","
+				if type(value) == str:
+					s = s + "\\\"" + key + "\\\":\\\"" + escapestr(value) + "\\\","
 				else:
-					s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
+					s = s + "\\\"" + key + "\\\":\\\"" + str(value) + "\\\","
 		s = s[:-1]
 		s = s + "}\"}"
 		s =	s + "]}"
@@ -349,6 +369,9 @@ def call(method, collection):
 
 #---------------------------------------------------
 def main():
+
+	arguments()
+
 	if method == "GET":
 		coll_list = collection.split(",")
 		for c in coll_list:
