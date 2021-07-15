@@ -36,6 +36,7 @@ cookiefile = None
 #---------------------------------------------------
 # JSON argument
 #{
+#	"cookiefile": "",
 #	"method": "",
 #	"collection": "",
 #	"filter": "",
@@ -43,18 +44,25 @@ cookiefile = None
 #	"output": "",
 #	"filepath": ""
 #}
+# "{'cookiefile': '', 'method': '', 'collection': '', 'filter': '', 'data': '', 'output': '', 'filepath': ''}"
 #---------------------------------------------------
 # 200 - GET and Authentication (POST) OK
 # 201 - POST Add object collection instance OK
 # 204 - PATCH Modify object collection instance OK, DEL Delete object collection instance OK
+
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'metadata', 'collection': 'none', 'filter': '', 'data': '', 'output': 'file', 'filepath': 'c:/tmp/json'}"
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata ALL
+
 # -cf d:/projects/git/creatio/creatio_cookie -c get Employee
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'GET', 'collection': 'Employee', 'output': 'console'}"
 # -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Employee
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'GET', 'collection': 'Employee,Contact', 'output': 'file', 'filepath': 'c:/tmp/json'}"
 # -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee
 
 # filter example - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#c543848b-cbec-4d4c-9037-e0234b5b3b6c
 # -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Contact -f "ModifiedOn gt 2021-06-13T00:00:00.00Z"
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'GET', 'collection': 'Contact', 'output': 'console', 'filter': 'ModifiedOn gt 2021-06-15T00:00:00.00Z'}"
 
 # create object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#837e4578-4a8c-4637-97d4-657079f12fe0
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
@@ -104,6 +112,52 @@ def arguments():
 	else:
 		dataraw = args.dataraw.replace("'","\"")
 		dataraw = dataraw.encode()
+
+#---------------------------------------------------
+def arguments_json(json_str) -> bool:
+	global error, method, collection, filter, cookiefile, dataraw, outto, filepath
+	ret = True
+	js = json.loads(json_str)
+
+	# get method
+	if js.get("method") != None:
+		if js["method"].upper() not in {'GET','POST','PATCH','DELETE','METADATA'}:
+			error = Error({"Code": 1, "Message": "[method] is wrong"})
+			ret = False
+		else:
+			method = js["method"].upper()
+	else:
+		error = Error({"Code": 1, "Message": "[method] can not be empty"})
+		ret = False
+
+	# get collection
+	if js.get("collection") != None:
+		collection = "" if js.get("collection") == "none" else js.get("collection")
+	else:
+		error = Error({"Code": 1, "Message": "[collection] can not be empty"})
+		ret = False
+
+	# get output method
+	if js.get("output") != None:
+		if js["output"].lower() not in {'console','file'}:
+			error = Error({"Code": 1, "Message": "[output] is wrong."})
+			ret = False
+		else:
+			outto = js["output"].lower()
+	else:
+		error = Error({"Code": 1, "Message": "[output] can not be empty"})
+		ret = False
+	
+	if outto == "file":
+		filepath = "" if js.get("filepath") == None else js.get("filepath")
+
+	# get filter
+	filter = "" if js.get("filter") == None else "?$filter=" + js.get("filter")
+	
+	# get cookiefile
+	cookiefile = "" if js.get("cookiefile") == None else js.get("cookiefile")
+
+	return ret
 
 #---------------------------------------------------
 class Exception(object):
@@ -368,9 +422,12 @@ def call(method, collection):
 	return s
 
 #---------------------------------------------------
-def main():
+def main(mode):
 
-	arguments()
+	if mode == "json":
+		arguments_json(sys.argv[1].replace("'","\""))		
+	else:
+		arguments()
 
 	if method == "GET":
 		coll_list = collection.split(",")
@@ -404,10 +461,11 @@ def main():
 
 #---------------------------------------------------
 def test():
-	pass
+	if not arguments_json(sys.argv[1].replace("'","\"")):
+		print(error.toJSON())
 	
 	
 #****************************************************************************************
-main()
+main("")
 #test()
 
