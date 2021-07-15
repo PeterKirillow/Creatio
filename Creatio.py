@@ -12,7 +12,7 @@ domain = "pre-ervez.terrasoft.ru"
 url_auth = "https://" + domain + "/ServiceModel/AuthService.svc/Login"
 url_coll = "https://" + domain + "/0/odata"
 username = "peter"
-userpassword = "Peter@1234"
+userpassword = "Peter@12345"
 #---------------------------------------------------
 
 outc = sys.stdout
@@ -154,7 +154,7 @@ def auth() -> bool:
 	response = requests.request("POST", url_auth, headers=headers, data=payload, verify=False)
 	responsecode = response.status_code
 	if response.status_code != 200:
-		error = Error({"Code": str(response.status_code), "Message": response.reason})
+		error = Error({"Code": response.status_code, "Message": response.reason})
 		ret = False
 	else:
 		error = Error(json.loads(response.text))
@@ -217,13 +217,16 @@ def call(method, collection):
 			if responsecode == 204 and method in {"PATCH","DELETE"}:
 				# (204) Object updated or deleted - OK
 				t = "deleted" if method == "DELETE" else "updated"
-				error = Error({"Code": str(response.status_code), "Message": "Object was " + t})
+				error = Error({"Code": response.status_code, "Message": "Object was " + t})
 				retry  = False
 			elif responsecode == 201 and method == "POST":
 				# (201) Object Created - OK
 				retry  = False
 			elif responsecode == 404:
-				error = Error({"Code": str(response.status_code), "Message": "Nothing to do"})
+				error = Error({"Code": response.status_code, "Message": "Nothing to do"})
+				retry  = False
+			elif responsecode == 500:
+				error = Error({"Code": response.status_code, "Message": response.text})
 				retry  = False
 			elif "@odata.context" in response.text:
 				retry = False
