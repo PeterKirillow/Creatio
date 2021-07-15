@@ -31,6 +31,7 @@ responsecode = None
 # 201 - POST Add object collection instance OK
 # 204 - PATCH Modify object collection instance OK, DEL Delete object collection instance OK
 # -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata none
+# -cf d:/projects/git/creatio/creatio_cookie  -fp c:/tmp/json metadata ALL
 # -cf d:/projects/git/creatio/creatio_cookie -c get Employee
 # -cf d:/projects/git/creatio/creatio_cookie -fp c:/tmp/json get Employee
 # -cf d:/projects/git/creatio/creatio_cookie -c get Contact,Employee
@@ -174,6 +175,10 @@ def out(filename, s):
 			f.write(s)
 
 #---------------------------------------------------
+def escapestr(str):
+	return str.replace('\r','\\r').replace('\n','\\n').replace("\"","'")
+
+#---------------------------------------------------
 def call(method, collection):
 	global error	
 	global cookiefile, dataraw
@@ -261,26 +266,59 @@ def call(method, collection):
 
 	collection = 'metadata' if collection == "" else collection
 
-	if js.get("value") != None:
-		js_v = json.loads(json.dumps(js["value"][0]))
+	if js.get("value") != None and 1 == 2:
+		# string concat. deprecated.		
 		s = "{\"Code\": " + str(responsecode) + ",\"values\":["
-		for j in js["value"]:
-			s = s + "{"
-			s = s + "\"collection\":\"" + collection + "\","		
-			if (collection != "metadata"):
-				s = s + "\"id\":\"" + j["Id"] +"\","
-				dc = datetime.strptime(j["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
-				dm = datetime.strptime(j["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
-				s = s + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
-				s = s + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
-
-			s = s + "\"data\":\"{"
-			for key, value in js_v.items():
-				if key not in ["Id", "CreatedOn", "ModifiedOn"]:
-					s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
+		if len(js["value"]) > 0:
+			js_v = json.loads(json.dumps(js["value"][0]))		
+			for j in js["value"]:
+				s = s + "{"
+				s = s + "\"collection\":\"" + collection + "\","		
+				if (collection != "metadata"):
+					s = s + "\"id\":\"" + j["Id"] +"\","
+					dc = datetime.strptime(j["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+					dm = datetime.strptime(j["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+					s = s + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
+					s = s + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
+				s = s + "\"data\":\"{"
+				for key, value in js_v.items():
+					if key not in ["Id", "CreatedOn", "ModifiedOn"]:
+						if type(j[key]) == str:
+							s = s + "\\\"" + key + "\\\":\\\"" + escapestr(j[key]) + "\\\","
+						else:
+							s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
+				s = s[:-1]
+				s = s + "}\"},"
 			s = s[:-1]
-			s = s + "}\"},"
-		s = s[:-1]
+		s =	s + "]}"
+	elif js.get("value") != None and 1 == 1:
+		# using list (for very big data). for better performance.
+		s_list = []
+		s = "{\"Code\": " + str(responsecode) + ",\"values\":["		
+		if len(js["value"]) > 0:
+			js_v = json.loads(json.dumps(js["value"][0]))
+			for j in js["value"]:
+				ss = "{"
+				ss = ss + "\"collection\":\"" + collection + "\","		
+				if (collection != "metadata"):
+					ss = ss + "\"id\":\"" + j["Id"] +"\","
+					dc = datetime.strptime(j["CreatedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+					dm = datetime.strptime(j["ModifiedOn"][0:19], "%Y-%m-%dT%H:%M:%S")
+					ss = ss + "\"CreatedOn\":\"" + dc.strftime("%Y-%m-%d %H:%M:%S") +"\","
+					ss = ss + "\"ModifiedOn\":\"" + dm.strftime("%Y-%m-%d %H:%M:%S") +"\","
+				ss = ss + "\"data\":\"{"
+				for key, value in js_v.items():
+					if key not in ["Id", "CreatedOn", "ModifiedOn"]:
+						if type(j[key]) == str:
+							ss = ss + "\\\"" + key + "\\\":\\\"" + escapestr(j[key]) + "\\\","
+						else:
+							ss = ss + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
+				ss = ss[:-1]
+				ss = ss + "}\"},"
+				s_list.append(ss)
+			for ls in s_list:
+				s = s + ls
+			s = s[:-1]
 		s =	s + "]}"
 	elif responsecode == 201:
 		# new object response
@@ -296,7 +334,10 @@ def call(method, collection):
 		s = s + "\"data\":\"{"
 		for key, value in js_v.items():
 			if key not in ["Id", "CreatedOn", "ModifiedOn", "@odata.context"]:
-				s = s + "\\\"" + key + "\\\":\\\"" + str(js_v[key]) + "\\\","
+				if type(j[key]) == str:
+					s = s + "\\\"" + key + "\\\":\\\"" + escapestr(j[key]) + "\\\","
+				else:
+					s = s + "\\\"" + key + "\\\":\\\"" + str(j[key]) + "\\\","
 		s = s[:-1]
 		s = s + "}\"}"
 		s =	s + "]}"
@@ -317,19 +358,20 @@ def main():
 		out(f"{coll_list[0]}_{method}.json", s)
 
 	elif method == "METADATA" and collection != "ALL":
+		# just metadata list
 		s = call("GET","")
 		out("metadata.json", s)
 
 	elif method == "METADATA" and collection == "ALL":
+		# get all collections from list of collections
 		s = call("GET","")
 		j = json.loads(s)
-		for k in j:
-			v = k["values"]
-			for d in v:
-				dj = json.loads(d["data"])
-				print(name)
-				if name not in {"VwSysSchemaInfo"}:
-					s = get(name)
+		if j.get("values") != None:
+			for v in j["values"]:
+				if v.get("data"):
+					data = json.loads(v.get("data"))
+					name = data["name"]
+					s = call("GET", name)
 					out(f"{name}.json", s)
 	else:
 		pass
