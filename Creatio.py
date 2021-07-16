@@ -67,11 +67,13 @@ cookiefile = None
 # create object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#837e4578-4a8c-4637-97d4-657079f12fe0
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'New User', 'JobTitle': 'Developer', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # -cf d:/projects/git/creatio/creatio_cookie -c post Contact -d "{'Name': 'Новый пользователь', 'JobTitle': 'Директор', 'BirthDate': '1980-08-24T00:00:00Z'}"
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'post', 'collection': 'Contact', 'data': {'Name': 'Святой Януарий', 'JobTitle': 'Директор Мира', 'BirthDate': '1980-08-24T00:00:00Z'}, 'output': 'console'}"
 # update object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#da518295-e1c8-4114-9f03-f5f236174986
 # -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(f78473be-7903-4b12-8172-013d9b8ebc26) -d "{'JobTitle': 'Simple Job', 'BirthDate': '1980-08-24T00:00:00Z'}"
 # -cf d:/projects/git/creatio/creatio_cookie -c patch Contact(6227b43d-ba46-458f-bc38-601173358cb7) -d "{'JobTitle': 'Проём окна', 'BirthDate': '1980-05-24T00:00:00Z', 'Email': "qq@gmail.com"}"
 # delete object - https://documenter.getpostman.com/view/10204500/SztHX5Qb?version=latest#364435a7-12ef-4924-83cf-ed9e74c23439
 # -cf d:/projects/git/creatio/creatio_cookie -c delete Contact(a1efd326-507b-4519-9e58-3e0fcff84389)
+# "{'cookiefile': 'd:/projects/git/creatio/creatio_cookie', 'method': 'DELETE', 'collection': 'Contact(885b717e-4508-4718-a380-28f13f6c7f65)', 'output': 'console'}"
 #---------------------------------------------------
 
 #---------------------------------------------------
@@ -99,19 +101,23 @@ def arguments():
 		outto = "console"
 	else:
 		outto = "file"
-		filepath = args.filepath
+		filepath = "" if args.filepath == None else args.filepath
 
 	method = args.method.upper()
 	if method not in {'GET','POST','PATCH','DELETE','METADATA'}:
 		exit(0)
+
+	# get collection
 	collection = "" if args.collection.lower() == "none" else args.collection
-	cookiefile = args.cookiefile
+	
+	# get cookiefile
+	cookiefile = "" if args.cookiefile == None else args.cookiefile
+
+	# get filter
 	filter = "" if args.filter is None else "?$filter=" + args.filter
-	if args.dataraw is None:
-		dataraw = ""
-	else:
-		dataraw = args.dataraw.replace("'","\"")
-		dataraw = dataraw.encode()
+	
+	# get dataraw
+	dataraw = "" if args.dataraw == None else args.dataraw.replace("'","\"").encode()
 
 #---------------------------------------------------
 def arguments_json(json_str) -> bool:
@@ -148,6 +154,7 @@ def arguments_json(json_str) -> bool:
 		error = Error({"Code": 1, "Message": "[output] can not be empty"})
 		ret = False
 	
+	# get filepath
 	if outto == "file":
 		filepath = "" if js.get("filepath") == None else js.get("filepath")
 
@@ -156,6 +163,9 @@ def arguments_json(json_str) -> bool:
 	
 	# get cookiefile
 	cookiefile = "" if js.get("cookiefile") == None else js.get("cookiefile")
+
+	# get dataraw
+	dataraw = "" if js.get("data") == None else json.dumps(js.get("data")).replace("'","\"").encode()
 
 	return ret
 
@@ -466,6 +476,6 @@ def test():
 	
 	
 #****************************************************************************************
-main("")
+main("json")
 #test()
 
